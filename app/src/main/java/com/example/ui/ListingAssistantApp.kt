@@ -452,7 +452,6 @@ fun DashboardScreen(
     }
 }
 
-// 3. CREATE LISTING SCREEN
 @Composable
 fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     val tempListing by viewModel.tempListing.collectAsStateWithLifecycle()
@@ -469,8 +468,88 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     var selectedCondition by remember { mutableStateOf(tempListing.condition) }
     var selectedPhotoStyle by remember { mutableStateOf("Suburban Estate") }
 
+    // Navigation and interactive camera/manual picker modes
+    var compilationMode by remember { mutableStateOf("camera") } // "camera" or "manual"
+    var isShutterFlashed by remember { mutableStateOf(false) }
+    var locationAutoDetected by remember { mutableStateOf(false) }
+    var detectedAddressLabel by remember { mutableStateOf("") }
+
     val propertyTypes = listOf("Single Family", "Townhouse", "Condominium", "Multi Family", "Land")
     val conditions = listOf("Fixer", "Fair", "Good", "Excellent", "Mint")
+
+    // Camera action shutter flash reset
+    LaunchedEffect(isShutterFlashed) {
+        if (isShutterFlashed) {
+            kotlinx.coroutines.delay(160)
+            isShutterFlashed = false
+        }
+    }
+
+    // Auto-compilation lookup map
+    val styleSpecMap = remember {
+        mapOf(
+            "Suburban Estate" to mapOf(
+                "address" to "411 Elm Street, Lake Forest, IL",
+                "bedrooms" to "4",
+                "bathrooms" to "3.5",
+                "sqft" to "3200",
+                "lot" to "0.45",
+                "year" to "2005",
+                "type" to "Single Family",
+                "condition" to "Excellent",
+                "asking" to "645000",
+                "upgrades" to "Fresh botanical gardening, complete dual-zone smart HVAC upgrade, newly finished patio decking"
+            ),
+            "Modern Minimalist" to mapOf(
+                "address" to "9820 Maplewood Lane, Austin, TX",
+                "bedrooms" to "3",
+                "bathrooms" to "2.5",
+                "sqft" to "2600",
+                "lot" to "0.28",
+                "year" to "2018",
+                "type" to "Single Family",
+                "condition" to "Mint",
+                "asking" to "825000",
+                "upgrades" to "Custom smart dimmer integration, floor-to-ceiling clear glass insulation pane, modern bath fittings"
+            ),
+            "Craftsman Cottage" to mapOf(
+                "address" to "542 Pine Valley Road, Portland, OR",
+                "bedrooms" to "3",
+                "bathrooms" to "2.0",
+                "sqft" to "1750",
+                "lot" to "0.22",
+                "year" to "1996",
+                "type" to "Single Family",
+                "condition" to "Good",
+                "asking" to "435000",
+                "upgrades" to "Newly renovated front porch columns, charming brick paths, custom fireplace mantle"
+            ),
+            "Luxury Condo" to mapOf(
+                "address" to "2200 Broadway Penthouse #42B, Manhattan, NY",
+                "bedrooms" to "2",
+                "bathrooms" to "2.0",
+                "sqft" to "1400",
+                "lot" to "0.0",
+                "year" to "2021",
+                "type" to "Condominium",
+                "condition" to "Mint",
+                "asking" to "1250000",
+                "upgrades" to "High-end luxury kitchen appliances, motorized shade controls, modern bathroom floor heating"
+            ),
+            "Suburban Traditional" to mapOf(
+                "address" to "120 Parkside Circle, Roswell, GA",
+                "bedrooms" to "3",
+                "bathrooms" to "2.0",
+                "sqft" to "1850",
+                "lot" to "0.25",
+                "year" to "1999",
+                "type" to "Single Family",
+                "condition" to "Good",
+                "asking" to "365000",
+                "upgrades" to "Tidy double-insulated garage door, freshly installed quartz kitchen countertops, new vinyl sidings"
+            )
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -478,6 +557,7 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // HEADER ROW
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { viewModel.navigateTo(Screen.Dashboard) }) {
@@ -491,6 +571,299 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             }
         }
 
+        // ENTRY MODE SELECTION TABS
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SlateCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GeoBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp)
+                ) {
+                    Button(
+                        onClick = { compilationMode = "camera" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (compilationMode == "camera") TealAccent else Color.Transparent,
+                            contentColor = if (compilationMode == "camera") Color.White else GeoTextDark
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📸 Instant AI Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Button(
+                        onClick = { compilationMode = "manual" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (compilationMode == "manual") TealAccent else Color.Transparent,
+                            contentColor = if (compilationMode == "manual") Color.White else GeoTextDark
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null
+                    ) {
+                        Text("✍️ Manual Spec Entry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // MODE A: CAMERA VIEWPORT & INTERACTIVE SIMULATOR (Default, Quickest)
+        if (compilationMode == "camera") {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131711)),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(2.dp, if (locationAutoDetected) TealAccent else GeoBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(290.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Simulated viewfinder grid lines using simple Compose Row & Col layout
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                            }
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                            }
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
+                            }
+                        }
+
+                        // Target Framing Brackets in the center
+                        Box(
+                            modifier = Modifier
+                                .size(90.dp)
+                                .align(Alignment.Center)
+                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        )
+
+                        // Camera UI Layout details
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Upper Status
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color.Red)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("• LIVE VIEW CAMERA", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        "📍 standing gps lock",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // Centered Instructions overlay (if not captured yet)
+                            if (!locationAutoDetected) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .align(Alignment.CenterHorizontally),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "POINT CAMERA AT HOME FACADE",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        "Choose style below to simulate scanning a real-world home icon.",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 10.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 2.dp)
+                                    )
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                        .padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "🟢 PARCEL LOCATION & SPECIFICATIONS DETECTED",
+                                        color = Color.Green,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        detectedAddressLabel,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        "Loaded Specs: $bedroomsInput beds • $bathroomsInput baths • $sqftInput sqft • Region comps synchronized.",
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = 10.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            // Lower Stats indicators
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Text("ISO 100", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                                Text("4K UHD • GPS AUTO-LOOKUP", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                                Text("f/1.8", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                            }
+                        }
+
+                        // Shutter Flash visual element
+                        if (isShutterFlashed) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.White)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Target Property style choice carousel matching current GPS pointer
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SlateCard),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, GeoBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("1. Standing in front of which style?", fontWeight = FontWeight.Bold, color = GeoTextDark)
+                        Text("Select design to simulate instant camera inspection:", fontSize = 11.sp, color = CharcoalMuted)
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(viewModel.photoStyles) { item ->
+                                val isSelected = selectedPhotoStyle == item.name
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(95.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) TealAccent else GeoSoftBg)
+                                        .border(
+                                            1.dp,
+                                            if (isSelected) TealAccent else GeoBorder,
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable { selectedPhotoStyle = item.name }
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Icon(
+                                            if (item.name == "Luxury Condo") Icons.Default.Star else Icons.Default.Home,
+                                            contentDescription = null,
+                                            tint = if (isSelected) Color.White else CharcoalMuted,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Column {
+                                            Text(item.name, color = if (isSelected) Color.White else GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                            Text(item.description, color = if (isSelected) Color.White.copy(alpha = 0.8f) else GeoTextMuted, fontSize = 8.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Action Button "COMPILE IMAGE SPECIFICATIONS"
+                        Button(
+                            onClick = {
+                                isShutterFlashed = true
+                                locationAutoDetected = true
+                                val specs = styleSpecMap[selectedPhotoStyle] ?: styleSpecMap.values.first()
+                                detectedAddressLabel = specs["address"] ?: ""
+                                
+                                // Autofill fields
+                                addressInput = specs["address"] ?: ""
+                                bedroomsInput = specs["bedrooms"] ?: "3"
+                                bathroomsInput = specs["bathrooms"] ?: "2.0"
+                                sqftInput = specs["sqft"] ?: "1800"
+                                lotSizeInput = specs["lot"] ?: "0.25"
+                                yearBuiltInput = specs["year"] ?: "2010"
+                                upgradesInput = specs["upgrades"] ?: ""
+                                askingPriceInput = specs["asking"] ?: ""
+                                selectedPropertyType = specs["type"] ?: "Single Family"
+                                selectedCondition = specs["condition"] ?: "Good"
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("📸 CAPTURE HOME & COMPILE SPECS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // DESIGN COMPONENT 2: PROPERTY ADDRESS ENTRY FIELD (Manual mode vs. Camera preview summary)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateCard),
@@ -499,21 +872,27 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("1. Enter Address (Simulates RESO Data fetch)", fontWeight = FontWeight.Bold, color = GeoTextDark)
+                    Text(
+                        text = if (compilationMode == "camera") "2. Verify/Modify Property Address" else "1. Enter Address",
+                        fontWeight = FontWeight.Bold,
+                        color = GeoTextDark
+                    )
 
                     OutlinedTextField(
                         value = addressInput,
                         onValueChange = {
                             addressInput = it
-                            viewModel.onAddressEntered(it)
-                            val updated = viewModel.tempListing.value
-                            bedroomsInput = updated.bedrooms.toString()
-                            bathroomsInput = updated.bathrooms.toString()
-                            sqftInput = updated.squareFeet.toString()
-                            lotSizeInput = updated.lotSize.toString()
-                            yearBuiltInput = updated.yearBuilt.toString()
-                            upgradesInput = updated.upgrades
-                            askingPriceInput = if (updated.askingPrice > 0) updated.askingPrice.toInt().toString() else ""
+                            if (compilationMode == "manual") {
+                                viewModel.onAddressEntered(it)
+                                val updated = viewModel.tempListing.value
+                                bedroomsInput = updated.bedrooms.toString()
+                                bathroomsInput = updated.bathrooms.toString()
+                                sqftInput = updated.squareFeet.toString()
+                                lotSizeInput = updated.lotSize.toString()
+                                yearBuiltInput = updated.yearBuilt.toString()
+                                upgradesInput = updated.upgrades
+                                askingPriceInput = if (updated.askingPrice > 0) updated.askingPrice.toInt().toString() else ""
+                            }
                         },
                         label = { Text("Property Address") },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -531,85 +910,30 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                             .testTag("address_input")
                     )
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(GeoSoftBg, RoundedCornerShape(12.dp))
-                            .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Type 'elm' or 'maple' or 'penthouse' to see mock public parcel records automatically load!",
-                            fontSize = 11.sp,
-                            color = GeoTextMuted,
-                            lineHeight = 14.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SlateCard),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, GeoBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("2. Choose Property Photo Style", fontWeight = FontWeight.Bold, color = GeoTextDark)
-                    Text("Select a professional style representable for AI feature processing:", fontSize = 11.sp, color = CharcoalMuted)
-
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(230.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(viewModel.photoStyles) { item ->
-                            val isSelected = selectedPhotoStyle == item.name
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(100.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isSelected) TealAccent else GeoSoftBg)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) TealAccent else GeoBorder,
-                                        RoundedCornerShape(12.dp)
-                                    )
-                                    .clickable { selectedPhotoStyle = item.name }
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(8.dp),
-                                    verticalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Icon(
-                                        if (item.name == "Luxury Condo") Icons.Default.Star else Icons.Default.Home,
-                                        contentDescription = null,
-                                        tint = if (isSelected) Color.White else CharcoalMuted,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Column {
-                                        Text(item.name, color = if (isSelected) Color.White else GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                        Text(item.description, color = if (isSelected) Color.White.copy(alpha = 0.8f) else GeoTextMuted, fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
-                            }
+                    if (compilationMode == "manual") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(GeoSoftBg, RoundedCornerShape(12.dp))
+                                .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Type 'elm' or 'maple' or 'penthouse' to see mock public records automatically search and load!",
+                                fontSize = 11.sp,
+                                color = GeoTextMuted,
+                                lineHeight = 14.sp
+                            )
                         }
                     }
                 }
             }
         }
 
+        // DESIGN COMPONENT 3: PROPERTY SPECIFICATIONS SUMMARY FORM
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateCard),
@@ -618,7 +942,11 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("3. Property Specifications", fontWeight = FontWeight.Bold, color = GeoTextDark)
+                    Text(
+                        text = if (compilationMode == "camera") "3. Adjust Spec Information" else "2. Adjust Property Specifications",
+                        fontWeight = FontWeight.Bold,
+                        color = GeoTextDark
+                    )
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(
@@ -797,6 +1125,7 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             }
         }
 
+        // TRIGGER COMPILATION PROCESS
         item {
             Button(
                 onClick = {
@@ -1223,6 +1552,14 @@ fun MarketingCopyScreen(viewModel: ListingAssistantViewModel) {
     val clipManager = LocalContext.current.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val context = LocalContext.current
 
+    // Local states for FSBO & Agent Handoff options
+    var sellerPathSelected by remember { mutableStateOf("fsbo") } // "fsbo" or "agent"
+    var agentName by remember { mutableStateOf("") }
+    var agentEmail by remember { mutableStateOf("") }
+    var commissionOffer by remember { mutableStateOf("2.5%") }
+    var customAgentNote by remember { mutableStateOf("") }
+    var isBriefCompiled by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1370,6 +1707,192 @@ fun MarketingCopyScreen(viewModel: ListingAssistantViewModel) {
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text("Regenerate marketing text variations", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SELLER CUSTOM DISTRIBUTION HUB (FSBO VS. AGENT HANDOFF)
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = SlateCardLight),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, GeoBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    "🤝 FSBO vs. Agent Listing Handoff Desk",
+                                    color = GeoTextDark,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Text(
+                                    "Ready to monetize? Choose whether to sell on your own privately as a FSBO (For Sale By Owner), or export these assets directly to represent your home to an agent.",
+                                    color = GeoTextMuted,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp
+                                )
+
+                                // Choice Toggles
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(
+                                        onClick = { sellerPathSelected = "fsbo" },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (sellerPathSelected == "fsbo") TealAccent else GeoSoftBg,
+                                            contentColor = if (sellerPathSelected == "fsbo") Color.White else GeoTextDark
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        elevation = null
+                                    ) {
+                                        Text("🏡 Sell Private (FSBO)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = { sellerPathSelected = "agent" },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (sellerPathSelected == "agent") TealAccent else GeoSoftBg,
+                                            contentColor = if (sellerPathSelected == "agent") Color.White else GeoTextDark
+                                        ),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        elevation = null
+                                    ) {
+                                        Text("💼 Hand off to Agent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                // Toggle Options UI
+                                if (sellerPathSelected == "fsbo") {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("🏡 Seller's FSBO Listing Tasks:", color = GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        Text("• Copy the MLS Standard text and paste to Zillow, Realtor, or Craigslist.", color = CharcoalMuted, fontSize = 11.sp)
+                                        Text("• Tap Share (upper right) or below to boot your live Virtual Sign-in Portal for buyer showings in your neighborhood.", color = CharcoalMuted, fontSize = 11.sp)
+                                        
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Button(
+                                            onClick = { viewModel.navigateTo(Screen.LeadCapture(tempListing.id)) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = GeoDeepGreen),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Launch Virtual Yard Sign Portal", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text("💼 Package & Share Brief to Local Realtor:", color = GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+
+                                        OutlinedTextField(
+                                            value = agentName,
+                                            onValueChange = { agentName = it },
+                                            label = { Text("Agent Name") },
+                                            placeholder = { Text("e.g. Sarah Jenkins") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                unfocusedContainerColor = Color.White,
+                                                focusedBorderColor = TealAccent
+                                            )
+                                        )
+
+                                        OutlinedTextField(
+                                            value = agentEmail,
+                                            onValueChange = { agentEmail = it },
+                                            label = { Text("Agent Email Address") },
+                                            placeholder = { Text("e.g. sarah@realtygroup.com") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                unfocusedContainerColor = Color.White,
+                                                focusedBorderColor = TealAccent
+                                            )
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedTextField(
+                                                value = commissionOffer,
+                                                onValueChange = { commissionOffer = it },
+                                                label = { Text("Offered Fee") },
+                                                modifier = Modifier.weight(1f),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    unfocusedContainerColor = Color.White,
+                                                    focusedBorderColor = TealAccent
+                                                )
+                                            )
+
+                                            OutlinedTextField(
+                                                value = "Ready to list immediately",
+                                                onValueChange = { },
+                                                label = { Text("Priority Level") },
+                                                enabled = false,
+                                                modifier = Modifier.weight(1.5f),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    unfocusedContainerColor = Color.White.copy(alpha = 0.5f)
+                                                )
+                                            )
+                                        }
+
+                                        OutlinedTextField(
+                                            value = customAgentNote,
+                                            onValueChange = { customAgentNote = it },
+                                            placeholder = { Text("Add custom hand-off note to agent...") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                unfocusedContainerColor = Color.White,
+                                                focusedBorderColor = TealAccent
+                                            )
+                                        )
+
+                                        if (isBriefCompiled) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(GeoSoftBg, RoundedCornerShape(8.dp))
+                                                    .border(1.dp, GeoBorder, RoundedCornerShape(8.dp))
+                                                    .padding(10.dp)
+                                            ) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Column {
+                                                    Text("✓ Listing Brief Export Complete!", color = GeoTextDark, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("Listing-Brief-${tempListing.address.take(15)}.xml has been packaged, compiled, and integrated into Realtor portal.", color = CharcoalMuted, fontSize = 10.sp, lineHeight = 13.sp)
+                                                }
+                                            }
+                                        } else {
+                                            Button(
+                                                onClick = {
+                                                    isBriefCompiled = true
+                                                    Toast.makeText(context, "Brief compiled & shared with Realtor!", Toast.LENGTH_LONG).show()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = GeoDeepGreen),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("🚀 TRANSACT & SHARE PORTABLE BRIEF", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 

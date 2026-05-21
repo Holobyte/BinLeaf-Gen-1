@@ -1,0 +1,6 @@
+{
+  "name": "Listing Assistant",
+  "description": "An AI-powered real estate assistant helper for FSBO sellers and agents to price properties, generate descriptions, and capture leads.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

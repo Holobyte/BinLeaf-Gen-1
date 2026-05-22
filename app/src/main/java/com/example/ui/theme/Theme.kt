@@ -7,11 +7,11 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val RealEstateDarkColorScheme = lightColorScheme(
+private val RealEstateDarkColorScheme = darkColorScheme(
     primary = TealAccent,
     onPrimary = Color.White,
     secondary = CopperGold,
-    onSecondary = Color.White,
+    onSecondary = Color.Black,
     tertiary = EmeraldSuccess,
     background = SlateDark800,
     onBackground = GeoTextDark,
@@ -19,10 +19,10 @@ private val RealEstateDarkColorScheme = lightColorScheme(
     onSurface = GeoTextDark,
     surfaceVariant = SlateCardLight,
     onSurfaceVariant = GeoTextDark,
-    error = Color(0xFFD32F2F)
+    error = Color(0xFFEF4444)
 )
 
-private val RealEstateLightColorScheme = lightColorScheme(
+private val RealEstateLightColorScheme = darkColorScheme(
     primary = LightPrimary,
     onPrimary = Color.White,
     secondary = LightTertiary,
@@ -34,7 +34,7 @@ private val RealEstateLightColorScheme = lightColorScheme(
     onSurface = LightText,
     surfaceVariant = LightCard,
     onSurfaceVariant = LightTextMuted,
-    error = Color(0xFFD32F2F)
+    error = Color(0xFFEF4444)
 )
 
 @Composable

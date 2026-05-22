@@ -30,5 +30,6 @@ data class Listing(
     val viewsCount: Int = 0,
     val leadsCount: Int = 0,
     val status: String = "Draft", // Draft, Active, Sold, Closed
-    val lastUpdatedDate: Long = System.currentTimeMillis()
+    val lastUpdatedDate: Long = System.currentTimeMillis(),
+    val compsJson: String = ""
 )

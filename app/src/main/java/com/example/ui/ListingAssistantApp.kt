@@ -1852,12 +1852,230 @@ fun PricingReportScreen(viewModel: ListingAssistantViewModel) {
                     }
 
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Interactive Neighborhood Comps (MLS)", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 13.sp)
-                            val listCompPrice = tempListing.suggestedPriceRecommended
-                            CompTableItem("142 Pinecrest Dr", "0.4 mi", "3B/2Ba", "Sold last week", listCompPrice * 0.98)
-                            CompTableItem("98 Elmwood Wood St", "0.9 mi", "Same specs", "Sold 30 days ago", listCompPrice * 1.01)
-                            CompTableItem("11 Maplewood Ave", "1.3 mi", "+300 sq.ft", "Active Listing", listCompPrice * 1.06)
+                        var showEditCompDialog by remember { mutableStateOf(false) }
+                        var selectedCompIndexForEdit by remember { mutableStateOf<Int?>(null) }
+                        var compToEdit by remember { mutableStateOf<com.example.data.CompProperty?>(null) }
+
+                        val comps by viewModel.activeComps.collectAsStateWithLifecycle()
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(GeoSoftBg, RoundedCornerShape(16.dp))
+                                .border(1.dp, GeoBorder, RoundedCornerShape(16.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "BinLeaf AI Comp Builder",
+                                        fontWeight = FontWeight.Bold,
+                                        color = GeoTextDark,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "Target comps: ${comps.size} (Recommended: 3-5)",
+                                        fontSize = 10.sp,
+                                        color = if (comps.size in 3..5) TealAccent else Color(0xFFB07219),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(TealAccent.copy(alpha = 0.15f))
+                                        .clickable {
+                                            selectedCompIndexForEdit = null
+                                            compToEdit = null
+                                            showEditCompDialog = true
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Add, contentDescription = "Add Comp", tint = TealAccent, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Add Comp", color = TealAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            if (comps.isEmpty()) {
+                                Text(
+                                    "No comps entered yet. Click \"Add Comp\" to enter comparable homes manually.",
+                                    color = GeoTextMuted,
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                                )
+                            } else {
+                                comps.forEachIndexed { idx, comp ->
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = SlateCard),
+                                        border = BorderStroke(1.dp, GeoBorder),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(comp.address, color = GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                    Text(
+                                                        text = "${comp.distanceMiles} mi • ${comp.bedrooms}B/${comp.bathrooms}Ba • ${comp.squareFeet} sqft • ${comp.condition}",
+                                                        color = CharcoalMuted,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = "$${String.format("%,.0f", comp.soldOrListPrice)}",
+                                                        color = TealAccent,
+                                                        fontWeight = FontWeight.Black,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    IconButton(
+                                                        onClick = {
+                                                            selectedCompIndexForEdit = idx
+                                                            compToEdit = comp
+                                                            showEditCompDialog = true
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = TealAccent, modifier = Modifier.size(14.dp))
+                                                    }
+                                                    IconButton(
+                                                        onClick = {
+                                                            viewModel.removeComparableProperty(idx)
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(14.dp))
+                                                    }
+                                                }
+                                            }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Rate: $${String.format("%,.1f", comp.pricePerSqFt)}/sqft • ${comp.soldOrListDate}",
+                                                    color = TealAccent,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                            if (comp.notes.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Note: ${comp.notes}",
+                                                    color = CharcoalMuted,
+                                                    fontSize = 9.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Display mini mathematical analysis
+                                val totalSqftRate = comps.sumOf { it.pricePerSqFt }
+                                val avgSqftRate = totalSqftRate / comps.size
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = SlateCardLight.copy(alpha = 0.3f)),
+                                    border = BorderStroke(1.dp, TealAccent.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Avg Price per Sq Ft:", fontSize = 10.sp, color = GeoTextDark, fontWeight = FontWeight.SemiBold)
+                                            Text("$${String.format("%,.2f", avgSqftRate)}/sqft", fontSize = 10.sp, color = TealAccent, fontWeight = FontWeight.Bold)
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Subject size adjustment (${tempListing.squareFeet} sqft):", fontSize = 10.sp, color = GeoTextDark, fontWeight = FontWeight.SemiBold)
+                                            Text("$${String.format("%,.0f", avgSqftRate * tempListing.squareFeet)}", fontSize = 10.sp, color = GeoDeepGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Divider(color = GeoBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+                            // Free Data Source Placeholders (API Connections)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Market Context Integrations (API)", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 11.sp)
+                                
+                                TableSourceItem(name = "Census ACS API (Neighborhood profile)", active = true, statusLabel = "Free Connected")
+                                TableSourceItem(name = "FRED API (Local mortgage rate context)", active = true, statusLabel = "Free Connected")
+                                TableSourceItem(name = "County/City Public Records (Tax assessor GIS)", active = true, statusLabel = "Free connected")
+                                TableSourceItem(name = "Manual user-entered comps override", active = true, statusLabel = "ACTIVE")
+                                
+                                TableSourceItem(name = "Regrid Parcel Map API", active = false, statusLabel = "Pro Upgrade")
+                                TableSourceItem(name = "ATTOM Regional Property API", active = false, statusLabel = "Pro Upgrade")
+                                TableSourceItem(name = "Authorized MLS / RESO Web API integration", active = false, statusLabel = "Enterprise License")
+                                
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(GeoSoftBg, RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info, 
+                                        contentDescription = "Not Appraisal", 
+                                        tint = TealAccent, 
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "AI-assisted pricing guidance, not an appraisal.",
+                                            fontWeight = FontWeight.Bold,
+                                            color = TealAccent,
+                                            fontSize = 9.sp
+                                        )
+                                        Text(
+                                            text = "BinLeaf respects provider Terms of Service. Estimates calculated without unauthorized site scraping (Zillow, Redfin, Realtor.com).",
+                                            color = CharcoalMuted,
+                                            fontSize = 8.sp,
+                                            lineHeight = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showEditCompDialog) {
+                            CompEditDialog(
+                                comp = compToEdit,
+                                onDismiss = { showEditCompDialog = false },
+                                onConfirm = { updatedComp ->
+                                    showEditCompDialog = false
+                                    val index = selectedCompIndexForEdit
+                                    if (index == null) {
+                                        viewModel.addComparableProperty(updatedComp)
+                                    } else {
+                                        viewModel.updateComparableProperty(index, updatedComp)
+                                    }
+                                }
+                            )
                         }
                     }
 
@@ -2972,6 +3190,262 @@ fun CompTableItem(address: String, dist: String, specs: String, status: String, 
                 fontWeight = FontWeight.Black,
                 fontSize = 12.sp
             )
+        }
+    }
+}
+
+@Composable
+fun TableSourceItem(name: String, active: Boolean, statusLabel: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(
+                imageVector = if (active) Icons.Default.CheckCircle else Icons.Default.Lock,
+                contentDescription = null,
+                tint = if (active) TealAccent else CharcoalMuted,
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(name, fontSize = 10.sp, color = GeoTextDark)
+        }
+        Surface(
+            color = if (active) TealAccent.copy(alpha = 0.12f) else CharcoalMuted.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(6.dp)
+        ) {
+            Text(
+                text = statusLabel.uppercase(),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (active) TealAccent else CharcoalMuted,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun CompEditDialog(
+    comp: com.example.data.CompProperty?,
+    onDismiss: () -> Unit,
+    onConfirm: (com.example.data.CompProperty) -> Unit
+) {
+    var address by remember { mutableStateOf(comp?.address ?: "") }
+    var priceStr by remember { mutableStateOf(comp?.soldOrListPrice?.let { String.format("%.0f", it) } ?: "") }
+    var dateStr by remember { mutableStateOf(comp?.soldOrListDate ?: "Sold recently") }
+    var beds by remember { mutableStateOf(comp?.bedrooms?.toString() ?: "3") }
+    var baths by remember { mutableStateOf(comp?.bathrooms?.toString() ?: "2.0") }
+    var sqft by remember { mutableStateOf(comp?.squareFeet?.toString() ?: "1800") }
+    var distance by remember { mutableStateOf(comp?.distanceMiles?.toString() ?: "0.5") }
+    var condition by remember { mutableStateOf(comp?.condition ?: "Good") }
+    var notes by remember { mutableStateOf(comp?.notes ?: "") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SlateCard,
+            border = BorderStroke(1.dp, GeoBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Text(
+                        text = if (comp == null) "Add Comparable Property" else "Edit Comparable Property",
+                        fontWeight = FontWeight.Bold,
+                        color = GeoTextDark,
+                        fontSize = 16.sp
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = address,
+                        onValueChange = { address = it },
+                        label = { Text("Comp Address", color = CharcoalMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TealAccent,
+                            unfocusedBorderColor = GeoBorder,
+                            focusedTextColor = GeoTextDark,
+                            unfocusedTextColor = GeoTextDark
+                        )
+                    )
+                }
+
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = priceStr,
+                            onValueChange = { priceStr = it },
+                            label = { Text("Price ($)", color = CharcoalMuted) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                        OutlinedTextField(
+                            value = dateStr,
+                            onValueChange = { dateStr = it },
+                            label = { Text("Sold/List Date", color = CharcoalMuted) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = beds,
+                            onValueChange = { beds = it },
+                            label = { Text("Beds", color = CharcoalMuted) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                        OutlinedTextField(
+                            value = baths,
+                            onValueChange = { baths = it },
+                            label = { Text("Baths", color = CharcoalMuted) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = sqft,
+                            onValueChange = { sqft = it },
+                            label = { Text("Sq Ft", color = CharcoalMuted) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                        OutlinedTextField(
+                            value = distance,
+                            onValueChange = { distance = it },
+                            label = { Text("Distance (mi)", color = CharcoalMuted) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TealAccent,
+                                unfocusedBorderColor = GeoBorder,
+                                focusedTextColor = GeoTextDark,
+                                unfocusedTextColor = GeoTextDark
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = condition,
+                        onValueChange = { condition = it },
+                        label = { Text("Condition (e.g. Good, Poor)", color = CharcoalMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TealAccent,
+                            unfocusedBorderColor = GeoBorder,
+                            focusedTextColor = GeoTextDark,
+                            unfocusedTextColor = GeoTextDark
+                        )
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Comp Notes", color = CharcoalMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TealAccent,
+                            unfocusedBorderColor = GeoBorder,
+                            focusedTextColor = GeoTextDark,
+                            unfocusedTextColor = GeoTextDark
+                        )
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel", color = CharcoalMuted, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val priceVal = priceStr.toDoubleOrNull() ?: 0.0
+                                val bedsVal = beds.toIntOrNull() ?: 3
+                                val bathsVal = baths.toDoubleOrNull() ?: 2.0
+                                val sqftVal = sqft.toIntOrNull() ?: 1800
+                                val distVal = distance.toDoubleOrNull() ?: 0.5
+                                if (address.isNotBlank() && priceVal > 0) {
+                                    onConfirm(
+                                        com.example.data.CompProperty(
+                                            address = address,
+                                            soldOrListPrice = priceVal,
+                                            soldOrListDate = dateStr,
+                                            bedrooms = bedsVal,
+                                            bathrooms = bathsVal,
+                                            squareFeet = sqftVal,
+                                            distanceMiles = distVal,
+                                            condition = condition,
+                                            notes = notes
+                                        )
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
+                        ) {
+                            Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
     }
 }

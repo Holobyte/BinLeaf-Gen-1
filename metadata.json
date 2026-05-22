@@ -1,6 +1,6 @@
 {
-  "name": "Listing Assistant",
-  "description": "An AI-powered real estate assistant helper for FSBO sellers and agents to price properties, generate descriptions, and capture leads.",
+  "name": "BinLeaf",
+  "description": "An AI-powered real estate assistant helper for FSBO sellers and agents to price properties, generate descriptions, and capture leads under BinLeaf.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,9 +1,28 @@
 package com.example.ui
 
+import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.ImageDecoder
+import android.provider.MediaStore
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import com.example.BuildConfig
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -452,6 +471,20 @@ fun DashboardScreen(
     }
 }
 
+fun saveBitmapToTempUri(context: Context, bitmap: android.graphics.Bitmap): android.net.Uri? {
+    return try {
+        val cacheDir = context.cacheDir
+        val tempFile = java.io.File(cacheDir, "temp_camera_photo_${System.currentTimeMillis()}.jpg")
+        java.io.FileOutputStream(tempFile).use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        android.net.Uri.fromFile(tempFile)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
 @Composable
 fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     val tempListing by viewModel.tempListing.collectAsStateWithLifecycle()
@@ -473,6 +506,129 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     var isShutterFlashed by remember { mutableStateOf(false) }
     var locationAutoDetected by remember { mutableStateOf(false) }
     var detectedAddressLabel by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    val addressDetectionStatus by viewModel.addressDetectionStatus.collectAsStateWithLifecycle()
+    val isDetecting = addressDetectionStatus == "Checking image metadata..." ||
+            addressDetectionStatus == "Using photo GPS metadata..." ||
+            addressDetectionStatus == "No photo GPS found. Checking device location..."
+            
+    var permissionStatusMessage by remember { mutableStateOf("") }
+
+    var capturedPhotoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
+    val loadedPhotoBitmap = remember(selectedPhotoUri) {
+        if (selectedPhotoUri != null) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, selectedPhotoUri!!)
+                    ImageDecoder.decodeBitmap(source)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, selectedPhotoUri)
+                }
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val cameraGranted = permissions[android.Manifest.permission.CAMERA] ?: false
+        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (cameraGranted && (fineLocationGranted || coarseLocationGranted)) {
+            permissionStatusMessage = "Granted"
+            Toast.makeText(context, "Permissions approved!", Toast.LENGTH_SHORT).show()
+        } else {
+            permissionStatusMessage = "Denied"
+            Toast.makeText(context, "Camera & Location permissions are required.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val detectAddressFromPhotoOrLocation: () -> Unit = {
+        val hasCamera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val hasFineLoc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLoc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasCamera || (!hasFineLoc && !hasCoarseLoc)) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            viewModel.detectAddressFromImageOrLocation(context, selectedPhotoUri)
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            capturedPhotoBitmap = bitmap
+            locationAutoDetected = true
+            val tempUri = saveBitmapToTempUri(context, bitmap)
+            selectedPhotoUri = tempUri
+            Toast.makeText(context, "Real physical photo captured successfully!", Toast.LENGTH_SHORT).show()
+            viewModel.detectAddressFromImageOrLocation(context, tempUri)
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedPhotoUri = uri
+            locationAutoDetected = true
+            Toast.makeText(context, "Photo uploaded successfully!", Toast.LENGTH_SHORT).show()
+            viewModel.detectAddressFromImageOrLocation(context, uri)
+        }
+    }
+
+    val openRealCamera: () -> Unit = {
+        val hasCamera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (!hasCamera) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            try {
+                cameraLauncher.launch(null)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to launch device camera: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    LaunchedEffect(tempListing.address) {
+        if (tempListing.address.isNotEmpty()) {
+            addressInput = tempListing.address
+            detectedAddressLabel = tempListing.address
+            bedroomsInput = tempListing.bedrooms.toString()
+            bathroomsInput = tempListing.bathrooms.toString()
+            sqftInput = tempListing.squareFeet.toString()
+            lotSizeInput = tempListing.lotSize.toString()
+            yearBuiltInput = tempListing.yearBuilt.toString()
+            upgradesInput = tempListing.upgrades
+            askingPriceInput = if (tempListing.askingPrice > 0) tempListing.askingPrice.toInt().toString() else ""
+            selectedPropertyType = tempListing.propertyType
+            selectedCondition = tempListing.condition
+        }
+    }
 
     val propertyTypes = listOf("Single Family", "Townhouse", "Condominium", "Multi Family", "Land")
     val conditions = listOf("Fixer", "Fair", "Good", "Excellent", "Mint")
@@ -627,6 +783,16 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                         .height(290.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
+                        // Display real photo captured from physical camera
+                        capturedPhotoBitmap?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "Captured home facade",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
                         // Simulated viewfinder grid lines using simple Compose Row & Col layout
                         Column(modifier = Modifier.fillMaxSize()) {
                             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -679,16 +845,28 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                                 }
 
                                 Surface(
-                                    color = Color.White.copy(alpha = 0.15f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    color = if (isDetecting) TealAccent else Color.White.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.clickable { detectAddressFromPhotoOrLocation() }
                                 ) {
-                                    Text(
-                                        "📍 standing gps lock",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Place,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            if (isDetecting) "Detecting..." else "📍 GPS Scan Lock",
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
 
@@ -698,7 +876,8 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .align(Alignment.CenterHorizontally),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
                                         "POINT CAMERA AT HOME FACADE",
@@ -707,8 +886,22 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                                         fontWeight = FontWeight.ExtraBold,
                                         textAlign = TextAlign.Center
                                     )
+
+                                    Button(
+                                        onClick = { openRealCamera() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.testTag("launch_camera_button")
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("ACTIVATE PHONE CAMERA", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
                                     Text(
-                                        "Choose style below to simulate scanning a real-world home icon.",
+                                        "Or pick mock/simulation style options below.",
                                         color = Color.White.copy(alpha = 0.7f),
                                         fontSize = 10.sp,
                                         textAlign = TextAlign.Center,
@@ -723,12 +916,26 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                                         .padding(10.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text(
-                                        "🟢 PARCEL LOCATION & SPECIFICATIONS DETECTED",
-                                        color = Color.Green,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            "🟢 PROPERTY SCANNING ACTIVE",
+                                            color = Color.Green,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            "Retake 🔄",
+                                            color = TealAccent,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable { openRealCamera() }
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         detectedAddressLabel,
@@ -877,6 +1084,134 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                         fontWeight = FontWeight.Bold,
                         color = GeoTextDark
                     )
+
+                    // Real Photo Preview and Upload/Take actions if in Camera compilation mode
+                    if (compilationMode == "camera") {
+                        val previewBitmap = loadedPhotoBitmap ?: capturedPhotoBitmap
+                        if (previewBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(140.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, TealAccent, RoundedCornerShape(12.dp))
+                            ) {
+                                Image(
+                                    bitmap = previewBitmap.asImageBitmap(),
+                                    contentDescription = "Selected property photo",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(topEnd = 8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (loadedPhotoBitmap != null) "Uploaded Photo" else "Captured Photo",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { openRealCamera() },
+                                colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("take_photo_button")
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("📸 TAKE PHOTO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = GeoDeepGreen),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("upload_photo_button")
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("📤 UPLOAD PHOTO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { detectAddressFromPhotoOrLocation() },
+                            enabled = !isDetecting,
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isDetecting) CharcoalMuted else TealAccent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("detect_address_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isDetecting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("DETECTING...", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(Icons.Default.Place, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("DETECT ADDRESS FROM PHOTO/LOCATION", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (addressDetectionStatus.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(GeoSoftBg, RoundedCornerShape(12.dp))
+                                    .border(1.dp, if (addressDetectionStatus == "Address detected.") TealAccent else GeoBorder, RoundedCornerShape(12.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (addressDetectionStatus == "Address detected.") Icons.Default.CheckCircle else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (addressDetectionStatus == "Address detected.") TealAccent else if (addressDetectionStatus.startsWith("Could not")) Color.Red else CharcoalMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Address Detection Status:",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp,
+                                        color = GeoTextMuted
+                                    )
+                                    Text(
+                                        text = addressDetectionStatus,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (addressDetectionStatus == "Address detected.") TealAccent else if (addressDetectionStatus.startsWith("Could not")) Color.Red else GeoTextDark
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     OutlinedTextField(
                         value = addressInput,
@@ -1576,7 +1911,7 @@ fun MarketingCopyScreen(viewModel: ListingAssistantViewModel) {
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column {
-                    Text("AI Listing Assistant Pack", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = GeoTextDark)
+                    Text("BinLeaf AI Asset Suite", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = GeoTextDark)
                     Text("Copy and deploy ready assets", fontSize = 12.sp, color = TealAccent)
                 }
             }

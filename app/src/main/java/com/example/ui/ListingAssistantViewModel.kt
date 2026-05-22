@@ -1,6 +1,8 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
@@ -8,6 +10,9 @@ import com.example.data.Lead
 import com.example.data.Listing
 import com.example.data.ListingRepository
 import com.example.service.GeminiService
+import com.example.service.ImageMetadataService
+import com.example.service.NativeLocationService
+import com.example.service.NativeGeocoderService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +54,39 @@ class ListingAssistantViewModel(application: Application) : AndroidViewModel(app
     val tempListing = MutableStateFlow(Listing())
     val selectedListing = MutableStateFlow<Listing?>(null)
     val selectedLead = MutableStateFlow<Lead?>(null)
+
+    val addressDetectionStatus = MutableStateFlow("")
+
+    fun detectAddressFromImageOrLocation(context: Context, imageUri: Uri?) {
+        viewModelScope.launch {
+            addressDetectionStatus.value = "Checking image metadata..."
+            var location: com.example.data.DetectedLocation? = null
+            
+            if (imageUri != null) {
+                location = ImageMetadataService.extractGpsLocation(context, imageUri)
+            }
+
+            if (location != null) {
+                addressDetectionStatus.value = "Using photo GPS metadata..."
+            } else {
+                addressDetectionStatus.value = "No photo GPS found. Checking device location..."
+                location = NativeLocationService.getCurrentLocation(context)
+            }
+
+            if (location != null) {
+                val address = NativeGeocoderService.reverseGeocode(context, location.latitude, location.longitude)
+                if (!address.isNullOrBlank()) {
+                    addressDetectionStatus.value = "Address detected."
+                    tempListing.value = tempListing.value.copy(address = address)
+                    onAddressEntered(address)
+                } else {
+                    addressDetectionStatus.value = "Could not detect address. Please type it manually."
+                }
+            } else {
+                addressDetectionStatus.value = "Could not detect address. Please type it manually."
+            }
+        }
+    }
 
     // Simulated gallery photo selections
     val photoStyles = listOf(

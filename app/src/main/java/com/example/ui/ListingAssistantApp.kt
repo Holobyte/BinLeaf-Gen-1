@@ -485,6 +485,22 @@ fun saveBitmapToTempUri(context: Context, bitmap: android.graphics.Bitmap): andr
     }
 }
 
+fun createTempImageFileAndUri(context: Context): Pair<java.io.File, android.net.Uri>? {
+    return try {
+        val cacheDir = context.cacheDir
+        val tempFile = java.io.File(cacheDir, "temp_full_photo_${System.currentTimeMillis()}.jpg")
+        if (!tempFile.exists()) {
+            tempFile.createNewFile()
+        }
+        val authority = "${context.packageName}.fileprovider"
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, authority, tempFile)
+        Pair(tempFile, uri)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
 @Composable
 fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     val tempListing by viewModel.tempListing.collectAsStateWithLifecycle()
@@ -553,6 +569,9 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
         }
     }
 
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var tempCameraFile by remember { mutableStateOf<java.io.File?>(null) }
+
     val detectAddressFromPhotoOrLocation: () -> Unit = {
         val hasCamera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val hasFineLoc = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -572,15 +591,13 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            capturedPhotoBitmap = bitmap
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraUri != null) {
+            selectedPhotoUri = tempCameraUri
             locationAutoDetected = true
-            val tempUri = saveBitmapToTempUri(context, bitmap)
-            selectedPhotoUri = tempUri
             Toast.makeText(context, "Real physical photo captured successfully!", Toast.LENGTH_SHORT).show()
-            viewModel.detectAddressFromImageOrLocation(context, tempUri)
+            viewModel.detectAddressFromImageOrLocation(context, tempCameraUri)
         }
     }
 
@@ -607,7 +624,14 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             )
         } else {
             try {
-                cameraLauncher.launch(null)
+                val fileAndUri = createTempImageFileAndUri(context)
+                if (fileAndUri != null) {
+                    tempCameraFile = fileAndUri.first
+                    tempCameraUri = fileAndUri.second
+                    cameraLauncher.launch(fileAndUri.second)
+                } else {
+                    Toast.makeText(context, "Unable to initialize temporary photo file.", Toast.LENGTH_SHORT).show()
+                }
             } catch (e: Exception) {
                 Toast.makeText(context, "Failed to launch device camera: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
@@ -784,7 +808,8 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         // Display real photo captured from physical camera
-                        capturedPhotoBitmap?.let { bitmap ->
+                        val displayBitmap = loadedPhotoBitmap ?: capturedPhotoBitmap
+                        displayBitmap?.let { bitmap ->
                             Image(
                                 bitmap = bitmap.asImageBitmap(),
                                 contentDescription = "Captured home facade",

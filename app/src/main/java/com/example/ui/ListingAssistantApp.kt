@@ -749,345 +749,154 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                     Text("Step 1 of 4: Setup Specs & Address Records", fontSize = 12.sp, color = TealAccent)
                 }
             }
-        }
-
-        // ENTRY MODE SELECTION TABS
+        }        // 1. ADD A PROPERTY PHOTO (CLEAN CARD - 4TH GRADE READING LEVEL)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateCard),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, GeoBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp)
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Button(
-                        onClick = { compilationMode = "camera" },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (compilationMode == "camera") TealAccent else Color.Transparent,
-                            contentColor = if (compilationMode == "camera") Color.White else GeoTextDark
-                        ),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = null
+                    Text(
+                        text = "Add a Property Photo",
+                        fontWeight = FontWeight.Bold,
+                        color = GeoTextDark,
+                        fontSize = 18.sp
+                    )
+                    
+                    Text(
+                        text = "Take a photo or upload one. BinLeaf will try to find the address. You can also type the address yourself.",
+                        color = GeoTextMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📸 Instant AI Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { openRealCamera() },
+                            colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("take_photo_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Take Photo", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = { galleryLauncher.launch("image/*") },
+                            colors = ButtonDefaults.buttonColors(containerColor = GeoSoftBg),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, GeoBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("upload_photo_button")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Upload Photo", color = TealAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 
                     Button(
-                        onClick = { compilationMode = "manual" },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (compilationMode == "manual") TealAccent else Color.Transparent,
-                            contentColor = if (compilationMode == "manual") Color.White else GeoTextDark
-                        ),
-                        modifier = Modifier.weight(1f),
+                        onClick = { detectAddressFromPhotoOrLocation() },
+                        enabled = !isDetecting,
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isDetecting) CharcoalMuted else TealAccent),
                         shape = RoundedCornerShape(12.dp),
-                        elevation = null
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("detect_address_button")
                     ) {
-                        Text("✍️ Manual Spec Entry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isDetecting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Finding address...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(Icons.Default.Place, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Find Address", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                }
-            }
-        }
 
-        // MODE A: CAMERA VIEWPORT & INTERACTIVE SIMULATOR (Default, Quickest)
-        if (compilationMode == "camera") {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131711)),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(2.dp, if (locationAutoDetected) TealAccent else GeoBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(290.dp)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        // Display real photo captured from physical camera
-                        val displayBitmap = loadedPhotoBitmap ?: capturedPhotoBitmap
-                        displayBitmap?.let { bitmap ->
+                    // Clean Photo Preview if selected or captured
+                    val previewBitmap = loadedPhotoBitmap ?: capturedPhotoBitmap
+                    if (previewBitmap != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
+                        ) {
                             Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = "Captured home facade",
+                                bitmap = previewBitmap.asImageBitmap(),
+                                contentDescription = "Selected property photo",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-
-                        // Simulated viewfinder grid lines using simple Compose Row & Col layout
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                            }
-                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                            }
-                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, Color.White.copy(alpha = 0.08f)))
-                            }
-                        }
-
-                        // Target Framing Brackets in the center
-                        Box(
-                            modifier = Modifier
-                                .size(90.dp)
-                                .align(Alignment.Center)
-                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                        )
-
-                        // Camera UI Layout details
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            // Upper Status
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(Color.Red)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("• LIVE VIEW CAMERA", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Surface(
-                                    color = if (isDetecting) TealAccent else Color.White.copy(alpha = 0.15f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.clickable { detectAddressFromPhotoOrLocation() }
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Place,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(10.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            if (isDetecting) "Detecting..." else "📍 GPS Scan Lock",
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Centered Instructions overlay (if not captured yet)
-                            if (!locationAutoDetected) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.CenterHorizontally),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        "POINT CAMERA AT HOME FACADE",
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Button(
-                                        onClick = { openRealCamera() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.testTag("launch_camera_button")
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("ACTIVATE PHONE CAMERA", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-
-                                    Text(
-                                        "Or pick mock/simulation style options below.",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 10.sp,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 2.dp)
-                                    )
-                                }
-                            } else {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                                        .padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            "🟢 PROPERTY SCANNING ACTIVE",
-                                            color = Color.Green,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            "Retake 🔄",
-                                            color = TealAccent,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.clickable { openRealCamera() }
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        detectedAddressLabel,
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Text(
-                                        "Loaded Specs: $bedroomsInput beds • $bathroomsInput baths • $sqftInput sqft • Region comps synchronized.",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 10.sp,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-
-                            // Lower Stats indicators
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Bottom
-                            ) {
-                                Text("ISO 100", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
-                                Text("4K UHD • GPS AUTO-LOOKUP", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
-                                Text("f/1.8", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
-                            }
-                        }
-
-                        // Shutter Flash visual element
-                        if (isShutterFlashed) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.White)
-                            )
-                        }
                     }
-                }
-            }
 
-            // Target Property style choice carousel matching current GPS pointer
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateCard),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.dp, GeoBorder),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("1. Standing in front of which style?", fontWeight = FontWeight.Bold, color = GeoTextDark)
-                        Text("Select design to simulate instant camera inspection:", fontSize = 11.sp, color = CharcoalMuted)
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(viewModel.photoStyles) { item ->
-                                val isSelected = selectedPhotoStyle == item.name
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(95.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isSelected) TealAccent else GeoSoftBg)
-                                        .border(
-                                            1.dp,
-                                            if (isSelected) TealAccent else GeoBorder,
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .clickable { selectedPhotoStyle = item.name }
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(10.dp),
-                                        verticalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Icon(
-                                            if (item.name == "Luxury Condo") Icons.Default.Star else Icons.Default.Home,
-                                            contentDescription = null,
-                                            tint = if (isSelected) Color.White else CharcoalMuted,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Column {
-                                            Text(item.name, color = if (isSelected) Color.White else GeoTextDark, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                            Text(item.description, color = if (isSelected) Color.White.copy(alpha = 0.8f) else GeoTextMuted, fontSize = 8.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                        }
-                                    }
-                                }
-                            }
+                    // Clean Address Found Display and Status Messages
+                    if (addressDetectionStatus.isNotEmpty()) {
+                        val displayStatus = when (addressDetectionStatus) {
+                            "Address detected." -> "Address found."
+                            "Could not detect address. Please type it manually." -> "We could not find the address. Please type it below."
+                            else -> addressDetectionStatus
                         }
+                        val isSuccess = displayStatus == "Address found."
+                        val isError = displayStatus.startsWith("We could not find")
 
-                        // Action Button "COMPILE IMAGE SPECIFICATIONS"
-                        Button(
-                            onClick = {
-                                isShutterFlashed = true
-                                locationAutoDetected = true
-                                val specs = styleSpecMap[selectedPhotoStyle] ?: styleSpecMap.values.first()
-                                detectedAddressLabel = specs["address"] ?: ""
-                                
-                                // Autofill fields
-                                addressInput = specs["address"] ?: ""
-                                bedroomsInput = specs["bedrooms"] ?: "3"
-                                bathroomsInput = specs["bathrooms"] ?: "2.0"
-                                sqftInput = specs["sqft"] ?: "1800"
-                                lotSizeInput = specs["lot"] ?: "0.25"
-                                yearBuiltInput = specs["year"] ?: "2010"
-                                upgradesInput = specs["upgrades"] ?: ""
-                                askingPriceInput = specs["asking"] ?: ""
-                                selectedPropertyType = specs["type"] ?: "Single Family"
-                                selectedCondition = specs["condition"] ?: "Good"
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
-                            shape = RoundedCornerShape(16.dp),
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp)
+                                .background(GeoSoftBg, RoundedCornerShape(12.dp))
+                                .border(1.dp, if (isSuccess) TealAccent else if (isError) Color.Red else GeoBorder, RoundedCornerShape(12.dp))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("📸 CAPTURE HOME & COMPILE SPECS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Icon(
+                                if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (isSuccess) TealAccent else if (isError) Color.Red else CharcoalMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Status:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = GeoTextMuted
+                                )
+                                Text(
+                                    text = displayStatus,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isSuccess) TealAccent else if (isError) Color.Red else GeoTextDark
+                                )
                             }
                         }
                     }
@@ -1095,7 +904,7 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             }
         }
 
-        // DESIGN COMPONENT 2: PROPERTY ADDRESS ENTRY FIELD (Manual mode vs. Camera preview summary)
+        // 2. PROPERTY ADDRESS ENTRY OR TYPE MANUALLY (VISIBLE AT ALL TIMES)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateCard),
@@ -1105,154 +914,24 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = if (compilationMode == "camera") "2. Verify/Modify Property Address" else "1. Enter Address",
+                        text = "Verify or Type Address",
                         fontWeight = FontWeight.Bold,
                         color = GeoTextDark
                     )
-
-                    // Real Photo Preview and Upload/Take actions if in Camera compilation mode
-                    if (compilationMode == "camera") {
-                        val previewBitmap = loadedPhotoBitmap ?: capturedPhotoBitmap
-                        if (previewBitmap != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(140.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.dp, TealAccent, RoundedCornerShape(12.dp))
-                            ) {
-                                Image(
-                                    bitmap = previewBitmap.asImageBitmap(),
-                                    contentDescription = "Selected property photo",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(topEnd = 8.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = if (loadedPhotoBitmap != null) "Uploaded Photo" else "Captured Photo",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { openRealCamera() },
-                                colors = ButtonDefaults.buttonColors(containerColor = TealAccent),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("take_photo_button")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("📸 TAKE PHOTO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Button(
-                                onClick = { galleryLauncher.launch("image/*") },
-                                colors = ButtonDefaults.buttonColors(containerColor = GeoDeepGreen),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("upload_photo_button")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("📤 UPLOAD PHOTO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        Button(
-                            onClick = { detectAddressFromPhotoOrLocation() },
-                            enabled = !isDetecting,
-                            colors = ButtonDefaults.buttonColors(containerColor = if (isDetecting) CharcoalMuted else TealAccent),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("detect_address_button")
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isDetecting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("DETECTING...", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                } else {
-                                    Icon(Icons.Default.Place, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("DETECT ADDRESS FROM PHOTO/LOCATION", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        if (addressDetectionStatus.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(GeoSoftBg, RoundedCornerShape(12.dp))
-                                    .border(1.dp, if (addressDetectionStatus == "Address detected.") TealAccent else GeoBorder, RoundedCornerShape(12.dp))
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    if (addressDetectionStatus == "Address detected.") Icons.Default.CheckCircle else Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = if (addressDetectionStatus == "Address detected.") TealAccent else if (addressDetectionStatus.startsWith("Could not")) Color.Red else CharcoalMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "Address Detection Status:",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 9.sp,
-                                        color = GeoTextMuted
-                                    )
-                                    Text(
-                                        text = addressDetectionStatus,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (addressDetectionStatus == "Address detected.") TealAccent else if (addressDetectionStatus.startsWith("Could not")) Color.Red else GeoTextDark
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     OutlinedTextField(
                         value = addressInput,
                         onValueChange = {
                             addressInput = it
-                            if (compilationMode == "manual") {
-                                viewModel.onAddressEntered(it)
-                                val updated = viewModel.tempListing.value
-                                bedroomsInput = updated.bedrooms.toString()
-                                bathroomsInput = updated.bathrooms.toString()
-                                sqftInput = updated.squareFeet.toString()
-                                lotSizeInput = updated.lotSize.toString()
-                                yearBuiltInput = updated.yearBuilt.toString()
-                                upgradesInput = updated.upgrades
-                                askingPriceInput = if (updated.askingPrice > 0) updated.askingPrice.toInt().toString() else ""
-                            }
+                            viewModel.onAddressEntered(it)
+                            val updated = viewModel.tempListing.value
+                            bedroomsInput = updated.bedrooms.toString()
+                            bathroomsInput = updated.bathrooms.toString()
+                            sqftInput = updated.squareFeet.toString()
+                            lotSizeInput = updated.lotSize.toString()
+                            yearBuiltInput = updated.yearBuilt.toString()
+                            upgradesInput = updated.upgrades
+                            askingPriceInput = if (updated.askingPrice > 0) updated.askingPrice.toInt().toString() else ""
                         },
                         label = { Text("Property Address") },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1270,24 +949,22 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                             .testTag("address_input")
                     )
 
-                    if (compilationMode == "manual") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(GeoSoftBg, RoundedCornerShape(12.dp))
-                                .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Type 'elm' or 'maple' or 'penthouse' to see mock public records automatically search and load!",
-                                fontSize = 11.sp,
-                                color = GeoTextMuted,
-                                lineHeight = 14.sp
-                            )
-                        }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(GeoSoftBg, RoundedCornerShape(12.dp))
+                            .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Type 'elm' or 'maple' or 'penthouse' to see mock public records automatically search and load!",
+                            fontSize = 11.sp,
+                            color = GeoTextMuted,
+                            lineHeight = 14.sp
+                        )
                     }
                 }
             }

@@ -77,14 +77,14 @@ class ListingAssistantViewModel(application: Application) : AndroidViewModel(app
             if (location != null) {
                 val address = NativeGeocoderService.reverseGeocode(context, location.latitude, location.longitude)
                 if (!address.isNullOrBlank()) {
-                    addressDetectionStatus.value = "Address detected."
+                    addressDetectionStatus.value = "Address found."
                     tempListing.value = tempListing.value.copy(address = address)
                     onAddressEntered(address)
                 } else {
-                    addressDetectionStatus.value = "Could not detect address. Please type it manually."
+                    addressDetectionStatus.value = "We could not find the address. Please type it below."
                 }
             } else {
-                addressDetectionStatus.value = "Could not detect address. Please type it manually."
+                addressDetectionStatus.value = "We could not find the address. Please type it below."
             }
         }
     }

@@ -148,7 +148,7 @@ object GeminiService {
         
         val prompt = """
             You are a real estate appraiser and market analyst.
-            Synthesize Zillow-level and MLS comp analysis for this property:
+            Synthesize a comparative market analysis (CMA) for this property:
             Address: ${address}, Specifications: $bedrooms Beds, $bathrooms Baths, $sqft Sqft, $propertyType.
             Condition: $condition. Upgrades: $upgrades. Proposed user price: $$askingPriceInput.
             

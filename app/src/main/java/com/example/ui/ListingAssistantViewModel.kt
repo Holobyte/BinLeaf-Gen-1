@@ -44,7 +44,7 @@ class ListingAssistantViewModel(application: Application) : AndroidViewModel(app
     val username = MutableStateFlow("Tony Holobyte")
     val userBrandingName = MutableStateFlow("Tony's Realty Hub")
     val activeSubscriptionTier = MutableStateFlow("FSBO Pro") // Free, FSBO Starter, FSBO Pro, Agent Pro, Broker
-    val dataSourceMode = MutableStateFlow("Public Records DB + AI Comps") // MLS, IDX, RESO Web API, Manual CSV
+    val dataSourceMode = MutableStateFlow("Manual Comps + AI Guidance") // MLS, IDX, RESO Web API, Manual CSV
 
     // Loading states
     val isAnalyzing = MutableStateFlow(false)
@@ -589,7 +589,7 @@ class ListingAssistantViewModel(application: Application) : AndroidViewModel(app
                     interestLevel = "High",
                     preferredShowingTime = "Saturday at 10:00 AM",
                     notes = "Very interested in the updated kitchen features. Selling her apartment soon.",
-                    leadSource = "Zillow Partner Connect",
+                    leadSource = "FSBO Public Page",
                     status = "Showing Scheduled"
                 ),
                 Lead(

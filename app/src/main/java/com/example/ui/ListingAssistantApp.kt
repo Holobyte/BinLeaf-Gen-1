@@ -242,18 +242,18 @@ fun OnboardingScreen(viewModel: ListingAssistantViewModel) {
                     Text("Core Workflow:", fontWeight = FontWeight.Bold, color = TealAccent, fontSize = 16.sp)
                     WorkflowStepItem(
                         icon = Icons.Default.Add,
-                        title = "1. Detail Lookup & Photo Style",
-                        description = "Type property address to pull simulated public records, then pick a high-end photo style."
+                        title = "1. Detail Lookup & Photo",
+                        description = "Type property address or search, then snap/upload a photo."
                     )
                     WorkflowStepItem(
                         icon = Icons.Default.Refresh,
                         title = "2. AI Magic Feature Extraction",
-                        description = "AI analyzes your choice to automatically detect landscaping, masonry, flooring, layout config."
+                        description = "AI analyzes details to suggest features, landscaping, and layout configuration."
                     )
                     WorkflowStepItem(
                         icon = Icons.Default.Check,
-                        title = "3. Zillow/MLS Comps Analysis",
-                        description = "Pricing engine estimates comparative values, suggesting optimal parameters and confidences."
+                        title = "3. Manual Comps & AI Guidance",
+                        description = "Pricing engine estimates comparative values based on entered comps and AI."
                     )
                     WorkflowStepItem(
                         icon = Icons.Default.Share,
@@ -535,22 +535,40 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
 
     var capturedPhotoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var loadedPhotoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
-    val loadedPhotoBitmap = remember(selectedPhotoUri) {
+    LaunchedEffect(selectedPhotoUri) {
         if (selectedPhotoUri != null) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = ImageDecoder.createSource(context.contentResolver, selectedPhotoUri!!)
-                    ImageDecoder.decodeBitmap(source)
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(context.contentResolver, selectedPhotoUri)
+                withContext(Dispatchers.IO) {
+                    val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        val source = ImageDecoder.createSource(context.contentResolver, selectedPhotoUri!!)
+                        ImageDecoder.decodeBitmap(source)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        MediaStore.Images.Media.getBitmap(context.contentResolver, selectedPhotoUri)
+                    }
+
+                    // Downscale image if it is too massive to prevent VM OOM crashes
+                    val maxDimension = 1024
+                    if (rawBitmap.width > maxDimension || rawBitmap.height > maxDimension) {
+                        val ratio = rawBitmap.width.toFloat() / rawBitmap.height.toFloat()
+                        val targetWidth = if (ratio > 1f) maxDimension else (maxDimension * ratio).toInt()
+                        val targetHeight = if (ratio > 1f) (maxDimension / ratio).toInt() else maxDimension
+                        loadedPhotoBitmap = android.graphics.Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
+                        if (rawBitmap != loadedPhotoBitmap) {
+                            rawBitmap.recycle()
+                        }
+                    } else {
+                        loadedPhotoBitmap = rawBitmap
+                    }
                 }
-            } catch (e: Exception) {
-                null
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                loadedPhotoBitmap = null
             }
         } else {
-            null
+            loadedPhotoBitmap = null
         }
     }
 
@@ -1200,7 +1218,7 @@ fun CreateListingScreen(viewModel: ListingAssistantViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Trigger AI Vision Feature Scan", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Generate Marketing Copy & Pricing Guidance", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1259,10 +1277,10 @@ fun FeatureReviewScreen(viewModel: ListingAssistantViewModel) {
                 ) {
                     CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(50.dp))
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Prompting Gemini Vision model...", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 16.sp)
+                    Text("Prompting Gemini Model...", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Analyzing visual components of your ${tempListing.photoUri} selection and compiling architectural tags. This takes a few seconds.",
+                        text = "Analyzing listing details and compiling architectural features. This takes a few seconds.",
                         color = GeoTextMuted,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
@@ -1431,10 +1449,10 @@ fun PricingReportScreen(viewModel: ListingAssistantViewModel) {
                 ) {
                     CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(50.dp))
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Triggering Local Pricing Model Engine...", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 15.sp)
+                    Text("Calculating AI Pricing Guidance...", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 15.sp)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Compiling nearby active listings and assessor valuations using models/gemini-3.5-flash logic. This takes a brief moment.",
+                        "Analyzing manual comps and subject details to estimate pricing boundaries with Gemini. This takes a brief moment.",
                         color = GeoTextMuted,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center
@@ -1697,14 +1715,14 @@ fun PricingReportScreen(viewModel: ListingAssistantViewModel) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("Market Context Integrations (API)", fontWeight = FontWeight.Bold, color = GeoTextDark, fontSize = 11.sp)
                                 
-                                TableSourceItem(name = "Census ACS API (Neighborhood profile)", active = true, statusLabel = "Free Connected")
-                                TableSourceItem(name = "FRED API (Local mortgage rate context)", active = true, statusLabel = "Free Connected")
-                                TableSourceItem(name = "County/City Public Records (Tax assessor GIS)", active = true, statusLabel = "Free connected")
+                                TableSourceItem(name = "Census ACS API (Neighborhood profile)", active = false, statusLabel = "Future Data Source")
+                                TableSourceItem(name = "FRED API (Local mortgage rate context)", active = false, statusLabel = "Future Data Source")
+                                TableSourceItem(name = "County/City Public Records (Tax assessor GIS)", active = false, statusLabel = "Future Data Source")
                                 TableSourceItem(name = "Manual user-entered comps override", active = true, statusLabel = "ACTIVE")
                                 
-                                TableSourceItem(name = "Regrid Parcel Map API", active = false, statusLabel = "Pro Upgrade")
-                                TableSourceItem(name = "ATTOM Regional Property API", active = false, statusLabel = "Pro Upgrade")
-                                TableSourceItem(name = "Authorized MLS / RESO Web API integration", active = false, statusLabel = "Enterprise License")
+                                TableSourceItem(name = "Regrid Parcel Map API", active = false, statusLabel = "Future Data Source")
+                                TableSourceItem(name = "ATTOM Regional Property API", active = false, statusLabel = "Future Data Source")
+                                TableSourceItem(name = "Authorized MLS / RESO Web API integration", active = false, statusLabel = "Future Data Source")
                                 
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(
@@ -2129,14 +2147,14 @@ fun MarketingCopyScreen(viewModel: ListingAssistantViewModel) {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Column {
                                                     Text("✓ Listing Brief Export Complete!", color = GeoTextDark, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                                    Text("Listing-Brief-${tempListing.address.take(15)}.xml has been packaged, compiled, and integrated into Realtor portal.", color = CharcoalMuted, fontSize = 10.sp, lineHeight = 13.sp)
+                                                    Text("Listing-Brief-${tempListing.address.take(15)}.xml has been packaged, compiled, and is ready to share.", color = CharcoalMuted, fontSize = 10.sp, lineHeight = 13.sp)
                                                 }
                                             }
                                         } else {
                                             Button(
                                                 onClick = {
                                                     isBriefCompiled = true
-                                                    Toast.makeText(context, "Brief compiled & shared with Realtor!", Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(context, "Brief compiled & ready!", Toast.LENGTH_LONG).show()
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = GeoDeepGreen),
                                                 shape = RoundedCornerShape(10.dp),
@@ -2638,7 +2656,7 @@ fun SettingsScreen(viewModel: ListingAssistantViewModel) {
         SubscriptionTier("FSBO Starter", "$19/listing. Narrative flyer copy, basic pricing gauges"),
         SubscriptionTier("FSBO Pro", "$49/listing. All generated flyer models, local CRM charts"),
         SubscriptionTier("Agent Pro", "$29/mo. 10 listings/mo, branding, full pipeline stats"),
-        SubscriptionTier("Broker / Team", "$99/mo. Multi-user layout, integrated RESO IDX Web API")
+        SubscriptionTier("Broker / Team", "$99/mo. Multi-user layout, integrated RESO IDX API (Future)")
     )
 
     LazyColumn(
@@ -2710,9 +2728,9 @@ fun SettingsScreen(viewModel: ListingAssistantViewModel) {
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
-                            "Public Records DB + AI Comps",
-                            "RESO Web API Feed (Needs license)",
-                            "IDX Live Feed Connection",
+                            "Manual Comps + AI Guidance",
+                            "RESO Web API Feed (Future Connection)",
+                            "IDX Live Feed (Future Connection)",
                             "Manual CSV Comp Data Upload"
                         ).forEach { src ->
                             val active = sourceMode == src
